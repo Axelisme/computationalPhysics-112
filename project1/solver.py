@@ -50,9 +50,10 @@ def solve_ivp(func, t_span, y0, method, t_eval, args):
 
     sol  = np.zeros((len(y0),len(t_eval))) # define the shape of the solution
 
-    #
-    # TODO:
-    #
+    sol[:,0] = y0 # set the initial condition
+    for i in range(1,len(t_eval)):
+        dt = t_eval[i]-t_eval[i-1]
+        sol[:,i] = _update(func,sol[:,i-1],dt,t_eval[i-1],method,*args)
 
     return sol
 
@@ -90,11 +91,9 @@ def _update_euler(derive_func,y0,dt,t,*args):
 
     """
 
-    #
-    # TODO:
-    #
+    ynext = y0 + dt*derive_func(t,y0,*args)
 
-    return y0 # <- change here. just a placeholder
+    return ynext
 
 def _update_rk2(derive_func,y0,dt,t,*args):
     """
@@ -103,11 +102,11 @@ def _update_rk2(derive_func,y0,dt,t,*args):
     :return: the next step solution y
     """
 
-    #
-    # TODO:
-    #
+    k0 = dt*derive_func(t,y0,*args)
+    k1 = dt*derive_func(t+dt,y0+k0,*args)
+    ynext = y0 + 0.5*(k0+k1)
 
-    return y0 # <- change here. just a placeholder
+    return ynext
 
 def _update_rk4(derive_func,y0,dt,t,*args):
     """
@@ -116,17 +115,19 @@ def _update_rk4(derive_func,y0,dt,t,*args):
     :return: the next step solution y
     """
 
-    #
-    # TODO:
-    #
+    k0 = dt*derive_func(t,y0,*args)
+    k1 = dt*derive_func(t+0.5*dt,y0+0.5*k0,*args)
+    k2 = dt*derive_func(t+0.5*dt,y0+0.5*k1,*args)
+    k3 = dt*derive_func(t+dt,y0+k2,*args)
+    ynext = y0 + (k0+2*k1+2*k2+k3)/6
 
-    return y0 # <- change here. just a placeholder
+    return ynext
 
 if __name__=='__main__':
 
 
     """
-    
+
     Testing solver.solve_ivp()
 
     Kuo-Chuan Pan 2022.10.07
@@ -152,11 +153,10 @@ if __name__=='__main__':
 
         """
 
-        #
-        # TODO:
-        #
- 
-        return y # <- change here. just a placeholder
+        yderive = np.zeros(len(y))
+        yderive[0] = y[1]
+        yderive[1] = -K/M*y[0]
+        return yderive
 
     t_span = (0, 10)
     y0     = np.array([1,0])
