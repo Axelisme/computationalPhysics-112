@@ -70,6 +70,17 @@ class Particles:
     def __len__(self):
         return len(self.massA)
 
+    def set_particles(self, pos, vel, acc, time=None):
+        if len(pos) != self.N or len(vel) != self.N or len(acc) != self.N:
+            raise ValueError(
+                f"Inconsistent length of input arrays, expect {self.N} but got {len(pos)}, {len(vel)}, {len(acc)}"
+            )
+        self.posA = pos
+        self.velA = vel
+        self.accA = acc
+        if time is not None:
+            self.time = time
+
     def add_particles(self, mass, tag, pos, vel, acc):
         if (
             len(mass) != self.N
@@ -90,19 +101,42 @@ class Particles:
         return self.N
 
     def output(self, filename):
-        with open(filename, "w") as f:
-            f.write(f"{self.N}\n")
-            for i in range(self.N):
-                f.write(f"{self.massA[i]:.6e} {self.tagA[i]} ")
-                f.write(
-                    f"{self.posA[i,0]:.6e} {self.posA[i,1]:.6e} {self.posA[i,2]:.6e} "
-                )
-                f.write(
-                    f"{self.velA[i,0]:.6e} {self.velA[i,1]:.6e} {self.velA[i,2]:.6e} "
-                )
-                f.write(
-                    f"{self.accA[i,0]:.6e} {self.accA[i,1]:.6e} {self.accA[i,2]:.6e}\n"
-                )
+        massA = self.massA
+        posA = self.posA
+        velA = self.velA
+        accA = self.accA
+        tagA = self.tagA
+        time = self.time
+
+        header = """----------------------------------------------------
+            Data from a 3D direct N-body simulation. 
+
+            rows are i-particle; 
+            coumns are :mass, tag, x ,y, z, vx, vy, vz, ax, ay, az
+
+            NTHU, Computational Physics 
+
+            ----------------------------------------------------
+        """
+        header += "Time = {}".format(time)
+        np.savetxt(
+            filename,
+            (
+                tagA[:],
+                massA[:, 0],
+                posA[:, 0],
+                posA[:, 1],
+                posA[:, 2],
+                velA[:, 0],
+                velA[:, 1],
+                velA[:, 2],
+                accA[:, 0],
+                accA[:, 1],
+                accA[:, 2],
+            ),
+            header=header,
+        )
+        return
 
     def draw(self, dim=2):
         fig = plt.figure()
