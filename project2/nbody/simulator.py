@@ -1,49 +1,21 @@
-import numpy as np
-import matplotlib.pyplot as plt
 from pathlib import Path
+
+import numpy as np
+
+from .calucate_accs import calculate_accs
 from .particles import Particles
-from numba import jit, njit, prange, set_num_threads
-
-"""
-The N-Body Simulator class is responsible for simulating the motion of N bodies
-
-
-
-"""
-
-
-@njit(
-    "float64[:,:](float64, float64, int64, float64[:,:], float64[:,:])", parallel=True
-)
-def _calculate_acceleration(G, rsoft, nparticles, masses, positions):
-    """
-    Calculate the acceleration of the particles
-    """
-    accelerations = np.zeros_like(positions)
-
-    for i in prange(nparticles):
-        for j in prange(nparticles):
-            if j > i:
-                rij = positions[i] - positions[j]
-                r = np.sqrt(np.sum(rij**2) + rsoft**2)
-                force = -G * masses[i, 0] * masses[j, 0] / r**3 * rij
-                accelerations[i] = accelerations[i] + force / masses[i, 0]
-                accelerations[j] = accelerations[j] - force / masses[j, 0]
-
-    return accelerations
 
 
 class NBodySimulator:
     def __init__(self, particles: Particles):
         self.particles = particles
-
-        return
+        self.time = particles.time
 
     def setup(
         self,
         G=1,
         rsoft=0.01,
-        method="RK4",
+        method="rk4",
         io_freq=10,
         io_header="nbody",
         io_screen=True,
@@ -72,8 +44,6 @@ class NBodySimulator:
         self.io_screen = io_screen
         self.visualization = visualization
 
-        return
-
     def evolve(self, dt: float, tmax: float):
         """
         Start to evolve the system
@@ -83,13 +53,15 @@ class NBodySimulator:
 
         """
 
+        assert hasattr(self, "G"), "Please setup the simulation first!"
+
         for i, t in enumerate(np.arange(0, tmax, dt)):
             self._advance_particles(dt, self.particles)
             self.particles.time = t
             if i % self.io_freq == 0:
                 # print info to screen
                 if self.io_screen:
-                    print("Time: ", t, "dt: ", dt)
+                    print(f"Time: {t: 2f}", "dt: ", dt)
 
                 # check output directroy
                 folder = "data_" + self.io_header
@@ -111,9 +83,7 @@ class NBodySimulator:
         """
         Calculate the acceleration of the particles
         """
-        return _calculate_acceleration(
-            self.G, self.rsoft, nparticles, masses, positions
-        )
+        return calculate_accs(self.G, self.rsoft, nparticles, masses, positions)
 
     def _advance_particles(self, dt, particles):
         match self.method:
@@ -123,9 +93,10 @@ class NBodySimulator:
                 particles = self._advance_particles_RK2(dt, particles)
             case "rk4":
                 particles = self._advance_particles_RK4(dt, particles)
+            case "leapfrog":
+                particles = self._advance_particles_leapfrog(dt, particles)
             case _:
                 raise ValueError(f"Invalid method: {self.method}")
-        return
 
     def _advance_particles_Euler(self, dt, particles: Particles):
         nparticles = particles.N
@@ -198,6 +169,26 @@ class NBodySimulator:
         pos = pos + (vel + 2 * vel1 + 2 * vel2 + vel3) * dt / 6
         vel = vel + (acc + 2 * acc1 + 2 * acc2 + acc3) * dt / 6
         acc = self._calculate_acceleration(nparticles, mass, pos)
+
+        # update the particles
+        particles.set_particles(pos, vel, acc)
+
+        return particles
+
+    def _advance_particles_leapfrog(self, dt, particles: Particles):
+        nparticles = particles.N
+        mass = particles.masses
+
+        pos = particles.posA
+        vel = particles.velA
+        acc = self._calculate_acceleration(nparticles, mass, pos)
+
+        # do the leapfrog update
+        vel += acc * dt / 2
+        pos += vel * dt
+        acc = self._calculate_acceleration(nparticles, mass, pos)
+
+        vel += acc * dt / 2
 
         # update the particles
         particles.set_particles(pos, vel, acc)

@@ -1,104 +1,101 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from dataclasses import dataclass, field
-from collections import namedtuple
 
 
-@dataclass
 class Particles:
     """
     Particle class to store particle properties
     """
 
-    N: int
-    massA: np.ndarray = field(init=False)
-    tagA: np.ndarray = field(init=False)
-    time: float = field(default=0.0)
-    posA: np.ndarray = field(init=False)
-    velA: np.ndarray = field(init=False)
-    accA: np.ndarray = field(init=False)
-
-    def __post_init__(self):
-        assert self.N >= 0, "Number of particles must be non-negative"
+    def __init__(self, N: int = 0):
+        self.N = N
         self.massA = np.zeros(self.N)
         self.tagA = np.zeros(self.N, dtype=int)
         self.posA = np.zeros((self.N, 3))
         self.velA = np.zeros((self.N, 3))
         self.accA = np.zeros((self.N, 3))
+        self.time = 0.0
 
-    def _sub_particles(self, idx):
-        sub_ps = Particles(N=len(idx), time=self.time)
-        sub_ps.massA = self.massA[idx]
-        sub_ps.tagA = self.tagA[idx]
-        sub_ps.posA = self.posA[idx]
-        sub_ps.velA = self.velA[idx]
-        sub_ps.accA = self.accA[idx]
-        return sub_ps
+    @property
+    def nparticles(self):
+        return self.N
 
-    def __getitem__(self, idx):
-        if isinstance(idx, int):
-            return namedtuple("Particle", ["mass", "tag", "pos", "vel", "acc"])(
-                self.massA[idx],
-                self.tagA[idx],
-                self.posA[idx],
-                self.velA[idx],
-                self.accA[idx],
-            )
-        elif isinstance(idx, slice):
-            return self._sub_particles(idx)
+    @property
+    def masses(self):
+        return self.massA
 
-    def __setitem__(self, idx, value):
-        if isinstance(idx, int):
-            self.massA[idx] = value.mass
-            self.tagA[idx] = value.tag
-            self.posA[idx] = value.pos
-            self.velA[idx] = value.vel
-            self.accA[idx] = value.acc
-        elif isinstance(idx, slice):
-            if not isinstance(value, Particles):
-                raise ValueError("Cannot set with non-Particles object")
-            if len(value) != len(idx):
-                raise ValueError(
-                    "Inconsistent length between slice and Particles object"
-                )
-            self.massA[idx] = value.massA
-            self.tagA[idx] = value.tagA
-            self.posA[idx] = value.posA
-            self.velA[idx] = value.velA
-            self.accA[idx] = value.accA
+    @property
+    def tags(self):
+        return self.tagA
 
-    def __len__(self):
-        return len(self.massA)
+    @property
+    def positions(self):
+        return self.posA
 
-    def set_particles(self, pos, vel, acc, time=None):
-        if len(pos) != self.N or len(vel) != self.N or len(acc) != self.N:
-            raise ValueError(
-                f"Inconsistent length of input arrays, expect {self.N} but got {len(pos)}, {len(vel)}, {len(acc)}"
-            )
+    @property
+    def velocities(self):
+        return self.velA
+
+    @property
+    def accelerations(self):
+        return self.accA
+
+    @masses.setter
+    def masses(self, m):
+        if len(m) != self.N:
+            raise ValueError("Number of particles does not match!")
+        self.massA = m
+
+    @tags.setter
+    def tags(self, tag):
+        if len(tag) != self.N:
+            raise ValueError("Number of particles does not match!")
+        self.tagA = tag
+
+    @positions.setter
+    def positions(self, pos):
+        if len(pos) != self.N:
+            raise ValueError("Number of particles does not match!")
+        self.posA = pos
+
+    @velocities.setter
+    def velocities(self, vel):
+        if len(vel) != self.N:
+            raise ValueError("Number of particles does not match!")
+        self.velA = vel
+
+    @accelerations.setter
+    def accelerations(self, acc):
+        if len(acc) != self.N:
+            raise ValueError("Number of particles does not match!")
+        self.accA = acc
+
+    def set_particles(self, pos, vel, acc, mass=None, time=None):
+        assert len(pos) == len(vel) == len(acc) == self.N, "Inconsistent length"
+        if mass is not None:
+            assert len(mass) == self.N, "Inconsistent length"
+
         self.posA = pos
         self.velA = vel
         self.accA = acc
+        if mass is not None:
+            self.massA = mass
         if time is not None:
             self.time = time
 
-    def add_particles(self, mass, tag, pos, vel, acc):
+    def add_particles(self, mass, pos, vel, acc):
         if (
             len(mass) != self.N
-            or len(tag) != self.N
             or len(pos) != self.N
             or len(vel) != self.N
             or len(acc) != self.N
         ):
             raise ValueError("Inconsistent length of input arrays")
-        self.massA = mass
-        self.tagA = tag
-        self.posA = pos
-        self.velA = vel
-        self.accA = acc
-
-    @property
-    def nparticles(self):
-        return self.N
+        self.N += len(mass)
+        self.massA = np.vstack((self.massA, mass))
+        self.tagA = np.arange(self.N)
+        self.posA = np.vstack((self.posA, pos))
+        self.velA = np.vstack((self.velA, vel))
+        self.accA = np.vstack((self.accA, acc))
 
     def output(self, filename):
         massA = self.massA
@@ -139,6 +136,8 @@ class Particles:
         return
 
     def draw(self, dim=2):
+        import matplotlib.pyplot as plt
+
         fig = plt.figure()
 
         if dim == 2:
