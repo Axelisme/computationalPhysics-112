@@ -4,15 +4,14 @@ BLOCK_N = cp.cuda.Device().attributes["MaxThreadsPerBlock"]
 BLOCK_X = int(BLOCK_N**0.5)
 BLOCK_Y = BLOCK_X
 
-gravity_kernel = cp.RawKernel(
+energy_kernel = cp.RawKernel(
     r"""
 extern "C" __device__
-void add_accs(
+void fill_energy(
     float *pos1,
     float *pos2,
     int dim, float G, float rsoft2, float mass1, float mass2,
-    float *acc1,
-    float *acc2
+    float *energy
 ) {
     // Calculate relative distance squared
     float rel_r2 = rsoft2;
@@ -21,21 +20,13 @@ void add_accs(
         rel_r2 += rel_x * rel_x;
     }
 
-    // pre-calculate some values
-    float inv_r = rsqrt(rel_r2);
-    float G_r3 = G * inv_r * inv_r * inv_r;
-
-    // Calculate gravity force
-    for (int k = 0; k < dim; k++) {
-        float Gx_r3 = G_r3 * (pos1[k] - pos2[k]);
-        atomicAdd(acc1 + k, -Gx_r3 * mass2);
-        atomicAdd(acc2 + k, Gx_r3 * mass1);
-    }
+    // Calculate gravity potential energy
+    atomicAdd(energy, -G * mass1 * mass2 * rsqrt(rel_r2));
 }
 
 
 extern "C" __global__
-void gravity_kernel(float *D, float *masses, int N, int dim, float G, float rsoft, float *accs) {
+void gravity_kernel(float *D, float *masses, int N, int dim, float G, float rsoft, float *energy) {
     int tidx = blockIdx.x * blockDim.x + threadIdx.x;
     int ntidx = gridDim.x * blockDim.x;
 
@@ -52,13 +43,12 @@ void gravity_kernel(float *D, float *masses, int N, int dim, float G, float rsof
             int i = (jdx < idx) ? idx : N - idx - odd;
             int j = (jdx < idx) ? jdx : N - 1 - jdx - odd;
 
-            // calculate the force between i and j
-            add_accs(
+            // calculate the energy between i and j
+            fill_energy(
                 D + i * dim,
                 D + j * dim,
                 dim, G, rsoft2, masses[i], masses[j],
-                accs + i * dim,
-                accs + j * dim
+                energy + idx
             );
         }
     }
@@ -68,13 +58,13 @@ void gravity_kernel(float *D, float *masses, int N, int dim, float G, float rsof
 )
 
 
-def calculate_accs(G, rsoft, nparticles, masses, positions):
+def get_energy(G, rsoft, nparticles, masses, positions):
     poss = cp.array(positions, dtype=cp.float32)
     masses = cp.array(masses, dtype=cp.float32)
-    accs = cp.zeros_like(poss, dtype=cp.float32)
+    energy = cp.zeros((nparticles + 1,), dtype=cp.float32)
 
     gridn = nparticles**2 // (4 * BLOCK_N)
-    gravity_kernel(
+    energy_kernel(
         grid=(gridn,),
         block=(BLOCK_X, BLOCK_Y),
         args=(
@@ -84,7 +74,17 @@ def calculate_accs(G, rsoft, nparticles, masses, positions):
             cp.int32(positions.shape[1]),
             cp.float32(G),
             cp.float32(rsoft),
-            accs,
+            energy,
         ),
     )
-    return accs.get()
+    return energy.sum().get().item()
+
+
+if __name__ == "__main__":
+    import numpy as np
+
+    num_particles = 5
+    masses = np.ones((num_particles,))
+    positions = np.random.randn(num_particles, 3)
+    E = get_energy(1.0, 1e-6, num_particles, masses, positions)
+    print(E)

@@ -1,5 +1,7 @@
 import numpy as np
 
+from .get_energy import get_energy
+
 
 class Particles:
     """
@@ -69,6 +71,12 @@ class Particles:
             raise ValueError("Number of particles does not match!")
         self.accA = acc
 
+    def kenetic_energy(self):
+        return 0.5 * np.sum(self.massA * np.sum(self.velA**2, axis=1))
+
+    def potential_energy(self, G, rsoft):
+        return get_energy(G, rsoft, self.N, self.massA, self.posA)
+
     def set_particles(self, pos, vel, acc, mass=None, time=None):
         assert len(pos) == len(vel) == len(acc) == self.N, "Inconsistent length"
         if mass is not None:
@@ -97,7 +105,25 @@ class Particles:
         self.velA = np.vstack((self.velA, vel))
         self.accA = np.vstack((self.accA, acc))
 
-    def output(self, filename):
+    def load(self, filename):
+        with open(filename) as f:
+            for _ in range(9):
+                f.readline()
+            time = float(f.readline().split("=")[-1])
+            kE = float(f.readline().split("=")[-1])
+            pE = float(f.readline().split("=")[-1])
+
+        m, t, x, y, z, vx, vy, vz, ax, ay, az = np.loadtxt(filename)
+        self.N = len(m)
+        self.massA = m
+        self.tagA = t
+        self.posA = np.column_stack((x, y, z))
+        self.velA = np.column_stack((vx, vy, vz))
+        self.accA = np.column_stack((ax, ay, az))
+
+        return kE, pE, time
+
+    def output(self, filename, G, rsoft):
         massA = self.massA
         posA = self.posA
         velA = self.velA
@@ -115,12 +141,14 @@ class Particles:
 
             ----------------------------------------------------
         """
-        header += "Time = {}".format(time)
+        header += "Time = {}\n".format(time)
+        header += f"Kenetic Energy = {self.kenetic_energy()}\n"
+        header += f"Potential Energy = {self.potential_energy(G, rsoft)}\n"
         np.savetxt(
             filename,
             (
-                tagA[:],
-                massA[:, 0],
+                massA,
+                tagA,
                 posA[:, 0],
                 posA[:, 1],
                 posA[:, 2],
@@ -133,7 +161,6 @@ class Particles:
             ),
             header=header,
         )
-        return
 
     def draw(self, dim=2):
         import matplotlib.pyplot as plt

@@ -70,7 +70,7 @@ class NBodySimulator:
                 # output data
                 fn = self.io_header + "_" + str(i).zfill(6) + ".dat"
                 fn = folder + "/" + fn
-                self.particles.output(fn)
+                self.particles.output(fn, G=self.G, rsoft=self.rsoft)
 
                 # visualization
                 if self.visualization:
